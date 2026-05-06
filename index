@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>KIMM 점심 회식 조율기 v0.01</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #020617; color: #f8fafc; font-family: 'Pretendard', sans-serif; touch-action: manipulation; margin: 0; min-height: 100dvh; display: flex; flex-direction: column; }
+        .date-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 1.5rem; transition: all 0.3s; cursor: pointer; position: relative; overflow: hidden; }
+        .date-card.selected { border-color: #6366f1; background: #1e1b4b; box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); }
+        .attendee-dot { width: 6px; height: 6px; border-radius: 50%; background: #6366f1; display: inline-block; margin-right: 4px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="max-w-lg mx-auto w-full p-6">
+
+    <!-- [1] 로그인 섹션 -->
+    <div id="loginScreen" class="flex-1 flex flex-col items-center justify-center text-center space-y-8">
+        <div>
+            <h1 class="text-3xl font-black text-indigo-500 italic tracking-tighter uppercase">KIMM LUNCH</h1>
+            <p class="text-slate-400 font-bold text-[10px] tracking-[0.3em] uppercase">v0.01 Super Alpha</p>
+        </div>
+        
+        <div class="w-full space-y-4">
+            <div class="text-left space-y-2">
+                <label class="text-xs text-slate-500 font-bold uppercase ml-1">이름을 선택하세요</label>
+                <select id="userSelect" class="w-full bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl text-white outline-none focus:border-indigo-500 font-bold appearance-none">
+                    <option value="" disabled selected>성함 선택</option>
+                    <option value="김건">김건</option>
+                    <option value="김대현">김대현</option>
+                    <option value="문지아">문지아</option>
+                    <option value="배상호">배상호</option>
+                    <option value="양일권">양일권</option>
+                    <option value="이광섭">이광섭</option>
+                    <option value="이지나">이지나</option>
+                    <option value="조혜정">조혜정</option>
+                    <option value="최태원">최태원</option>
+                    <option value="admin">관리자 (Reset)</option>
+                </select>
+            </div>
+            <button onclick="startApp()" class="w-full bg-indigo-600 py-4 rounded-2xl font-black text-white text-lg shadow-2xl active:scale-95 transition-all">접속하기</button>
+        </div>
+    </div>
+
+    <!-- [2] 일정 조율 섹션 -->
+    <div id="mainScreen" class="hidden space-y-6">
+        <div class="flex justify-between items-end">
+            <div>
+                <h2 id="welcomeMsg" class="text-xl font-black text-white"></h2>
+                <p class="text-xs text-slate-500">참석 가능한 모든 날짜를 선택해주세요.</p>
+            </div>
+            <button onclick="location.reload()" class="text-[10px] text-slate-600 font-bold underline">로그아웃</button>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4" id="dateList">
+            <!-- 5월 12일 -->
+            <div class="date-card" onclick="toggleVote('0512')">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-lg font-black">5월 12일 (화)</span>
+                    <span id="count_0512" class="text-indigo-400 font-black">0명</span>
+                </div>
+                <div id="list_0512" class="text-[11px] text-slate-400 flex flex-wrap gap-2"></div>
+            </div>
+            <!-- 5월 13일 -->
+            <div class="date-card" onclick="toggleVote('0513')">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-lg font-black">5월 13일 (수)</span>
+                    <span id="count_0513" class="text-indigo-400 font-black">0명</span>
+                </div>
+                <div id="list_0513" class="text-[11px] text-slate-400 flex flex-wrap gap-2"></div>
+            </div>
+            <!-- 5월 18일 -->
+            <div class="date-card" onclick="toggleVote('0518')">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-lg font-black">5월 18일 (월)</span>
+                    <span id="count_0518" class="text-indigo-400 font-black">0명</span>
+                </div>
+                <div id="list_0518" class="text-[11px] text-slate-400 flex flex-wrap gap-2"></div>
+            </div>
+            <!-- 5월 22일 -->
+            <div class="date-card" onclick="toggleVote('0522')">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-lg font-black">5월 22일 (금)</span>
+                    <span id="count_0522" class="text-indigo-400 font-black">0명</span>
+                </div>
+                <div id="list_0522" class="text-[11px] text-slate-400 flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+
+        <button id="resetBtn" onclick="resetData()" class="hidden w-full bg-rose-900/50 text-rose-500 py-3 rounded-xl font-bold text-xs uppercase border border-rose-900/50">데이터 초기화 (Admin Only)</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBjqzM3ScDSoINSMiCukjFG6z7MBjinI1M", authDomain: "nextgenband.firebaseapp.com", databaseURL: "https://nextgenband-default-rtdb.firebaseio.com", projectId: "nextgenband", storageBucket: "nextgenband.firebasestorage.app", messagingSenderId: "251453757830", appId: "1:251453757830:web:201c7945ef0eba901db407" };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let currentUser = "";
+        let isAdmin = false;
+
+        window.startApp = () => {
+            const select = document.getElementById('userSelect');
+            if(!select.value) return;
+            
+            currentUser = select.value;
+            isAdmin = (currentUser === "admin");
+
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainScreen').classList.remove('hidden');
+            document.getElementById('welcomeMsg').innerText = isAdmin ? "관리자 모드" : `${currentUser}님, 안녕하세요!`;
+            if(isAdmin) document.getElementById('resetBtn').classList.remove('hidden');
+
+            syncData();
+        };
+
+        function syncData() {
+            onValue(ref(db, 'lunch_vote'), (snap) => {
+                const data = snap.val() || {};
+                const dates = ['0512', '0513', '0518', '0522'];
+                
+                dates.forEach(date => {
+                    const attendees = data[date] || {};
+                    const attendeeList = Object.keys(attendees);
+                    const listEl = document.getElementById(`list_${date}`);
+                    const countEl = document.getElementById(`count_${date}`);
+                    const cardEl = listEl.parentElement;
+
+                    countEl.innerText = `${attendeeList.length}명`;
+                    listEl.innerHTML = attendeeList.map(name => `<span><i class="attendee-dot"></i>${name}</span>`).join('');
+                    
+                    if(attendees[currentUser]) {
+                        cardEl.classList.add('selected');
+                    } else {
+                        cardEl.classList.remove('selected');
+                    }
+                });
+            });
+        }
+
+        window.toggleVote = (dateCode) => {
+            if(isAdmin) return;
+            const voteRef = ref(db, `lunch_vote/${dateCode}/${currentUser}`);
+            onValue(voteRef, (snap) => {
+                if(snap.exists()) {
+                    remove(voteRef);
+                } else {
+                    set(voteRef, true);
+                }
+            }, { onlyOnce: true });
+        };
+
+        window.resetData = () => {
+            if(confirm("모든 투표 데이터를 삭제하시겠습니까?")) {
+                remove(ref(db, 'lunch_vote'));
+            }
+        };
+    </script>
+</body>
+</html>
